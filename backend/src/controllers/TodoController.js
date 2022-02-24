@@ -1,12 +1,13 @@
 const Todo = require('../models/todo')
+const {handleTodoErrors} = require('../config/utils')
 
 const create = async (req, res, next) => {
     try {
         const todo = {...req.body}
         await Todo.create(todo);
-        res.status(200).json({message: 'Tarefa cadastrada com sucesso.'})
+        return res.status(200).json({message: 'Tarefa cadastrada com sucesso.'})
     } catch (e) {
-        res.status(400).json({message: e})
+        return handleTodoErrors(e, req, res)
     }
 }
 
@@ -14,11 +15,23 @@ const edit = async (req, res, next) => {
     const {id} = req.params;
 
     try {
+        let todoEdit = await Todo.findById(id)
         let todo = {...req.body}
-        await Todo.findOneAndUpdate({_id: id}, todo)
-        res.status(200).json({message: 'Tarefa editada com sucesso.'})
+        if (todoEdit) {
+            if (todoEdit.workTime) {
+                todo.workTime = todoEdit.workTime
+            }
+            todo.createdAt = todoEdit.createdAt
+            await Todo.findOneAndUpdate({_id: id}, todo, {overwrite: true})
+            return res.status(200).json({message: 'Tarefa editada com sucesso'})
+        } else {
+            return res.status(404).json({message: 'Tarefa não existe'})
+        }
     } catch (e) {
-        res.status(400).json({message: e})
+        if (e.path === '_id') {
+            return res.status(404).json({message: 'Tarefa não existe'})
+        }
+        return handleTodoErrors(e, req, res)
     }
 }
 
@@ -32,9 +45,9 @@ const index = async (req, res, next) => {
             .limit(resPerPage);
         const numOfRecords = await Todo.count();
         res.set("x-total-count", numOfRecords);
-        res.json(todos)
+        return res.json(todos)
     } catch (e) {
-        res.status(400).json({message: e})
+        return res.status(400).json({message: e})
     }
 }
 
@@ -43,33 +56,51 @@ const getById = async (req, res, next) => {
 
     try {
         const todo = await Todo.findById(id);
-        return res.json(todo)
+        if (todo) {
+            return res.json(todo)
+        } else {
+            return res.status(404).json({message: 'Tarefa não existe'})
+        }
     } catch (e) {
-        res.status(400).json({message: e})
+        return res.status(400).json({message: 'Não foi possível buscar tarefa'})
     }
 }
 
 const remove = async (req, res, next) => {
     const {id} = req.params;
 
-    Todo.deleteOne({_id: id}, function (err) {
-        if (err) {
-            return res.status(400).send({message: err});
-        } else {
+    try {
+        if (await Todo.findById(id)) {
+            await Todo.findByIdAndRemove(id)
             return res.status(200).json({message: 'Tarefa excluída do sistema.'})
+        } else {
+            return res.status(404).send({message: 'Tarefa não existe'});
         }
-    })
+    } catch (e) {
+        return res.status(400).send({message: 'Não foi possível remover a tarefa'});
+    }
 }
 
 const startDoing = async (req, res, next) => {
     const {id} = req.params;
 
     try {
-        let todo = {...req.body}
-        await Todo.findOneAndUpdate({_id: id}, todo)
-        res.status(200).json({message: 'Tarefa editada com sucesso.'})
+        const todo = await Todo.findById(id)
+        if (!todo) {
+            return res.status(404).send({message: 'Tarefa não existe'});
+        }
+        if (todo.done) {
+            return res.status(400).json({message: 'Tarefa concluída. Não é possível iniciar'})
+        }
+        if (todo.startedAt !== undefined) {
+            return res.status(400).json({message: 'Tarefa já está em execução'})
+        } else {
+            todo.startedAt = Date.now()
+            todo.save();
+            return res.status(200).json({message: 'Tarefa iniciada. Tempo está sendo contabilizado'})
+        }
     } catch (e) {
-        res.status(400).json({message: e})
+        return res.status(400).json({message: 'Não foi possível iniciar execução de tarefa'})
     }
 }
 
@@ -77,12 +108,53 @@ const finishDoing = async (req, res, next) => {
     const {id} = req.params;
 
     try {
-        let todo = {...req.body}
-        await Todo.findOneAndUpdate({_id: id}, todo)
-        res.status(200).json({message: 'Tarefa editada com sucesso.'})
+        const todo = await Todo.findById(id)
+        if (!todo) {
+            return res.status(404).send({message: 'Tarefa não existe'});
+        }
+        if (todo.startedAt !== undefined) {
+            const timeDifference = Math.abs(todo.startedAt.getTime() - new Date().getTime());
+            const timeInSeconds = timeDifference / 1000
+            todo.startedAt = undefined
+            if (todo.workTime) {
+                todo.workTime = todo.workTime + timeInSeconds
+            } else {
+                todo.workTime = timeInSeconds
+            }
+            todo.save()
+            return res.status(200).json({message: 'Tarefa com execução finalizada'})
+        } else {
+            return res.status(400).json({message: 'Tarefa não está em execução'})
+        }
     } catch (e) {
-        res.status(400).json({message: e})
+        return res.status(400).json({message: 'Não foi possível finalizar execução de tarefa'})
     }
 }
 
-module.exports = {create, index, remove, edit, getById, startDoing, finishDoing}
+const done = async (req, res, next) => {
+    const {id} = req.params;
+
+    try {
+        const todo = await Todo.findById(id)
+        if (!todo) {
+            return res.status(404).send({message: 'Tarefa não existe'});
+        }
+        todo.done = !todo.done
+        if (todo.startedAt !== undefined && todo.done) {
+            const timeDifference = Math.abs(todo.startedAt.getTime() - new Date().getTime());
+            const timeInSeconds = timeDifference / 1000
+            todo.startedAt = undefined
+            if (todo.workTime) {
+                todo.workTime = todo.workTime + timeInSeconds
+            } else {
+                todo.workTime = timeInSeconds
+            }
+        }
+        todo.save()
+        return res.status(200).json({message: 'Tarefa marcada como ' + (todo.done ? 'concluída' : 'pendente')})
+    } catch (e) {
+        return res.status(400).json({message: 'Não foi possível marcar tarefa como concluída'})
+    }
+}
+
+module.exports = {create, index, remove, edit, getById, startDoing, finishDoing, done}
