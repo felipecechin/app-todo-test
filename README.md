@@ -15,6 +15,12 @@ Para construção do backend, foram utilizados:
 5. Rotas criadas da API:
     1. ``GET`` ``/todo`` -> para buscar tarefas
     2. ``POST`` ``/todo`` -> para adicionar tarefa
+       1. Tarefa pode ser criada passando, por exemplo, o objeto JSON no Body da requisição: 
+       ```json
+          {
+          "description": "Levar cachorro para passear"
+          }
+       ```
     3. ``PUT`` ``/todo/:id`` -> para atualizar tarefa
     4. ``GET`` ``/todo/:id`` -> para buscar tarefa por ID
     5. ``DELETE`` ``/todo/:id`` -> para deletar tarefa
