@@ -6,6 +6,8 @@ const todoSchema = new mongoose.Schema({
     createdAt: {type: Date, default: Date.now},
     startedAt: {type: Date},
     workTime: {type: Number}
+}, {
+    versionKey: false
 })
 
 todoSchema.pre('findOneAndUpdate', function (next) {

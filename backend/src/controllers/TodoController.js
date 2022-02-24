@@ -1,11 +1,11 @@
 const Todo = require('../models/todo')
-const {handleTodoErrors} = require('../config/utils')
+const {handleTodoErrors, setWorkTime} = require('../config/utils')
 
 const create = async (req, res, next) => {
     try {
         const todo = {...req.body}
         await Todo.create(todo);
-        return res.status(200).json({message: 'Tarefa cadastrada com sucesso.'})
+        return res.status(200).json({message: 'Tarefa cadastrada com sucesso'})
     } catch (e) {
         return handleTodoErrors(e, req, res)
     }
@@ -22,6 +22,9 @@ const edit = async (req, res, next) => {
                 todo.workTime = todoEdit.workTime
             }
             todo.createdAt = todoEdit.createdAt
+            if (todoEdit.startedAt !== undefined && todo.done) {
+                setWorkTime(todo, todoEdit.startedAt)
+            }
             await Todo.findOneAndUpdate({_id: id}, todo, {overwrite: true})
             return res.status(200).json({message: 'Tarefa editada com sucesso'})
         } else {
@@ -47,7 +50,7 @@ const index = async (req, res, next) => {
         res.set("x-total-count", numOfRecords);
         return res.json(todos)
     } catch (e) {
-        return res.status(400).json({message: e})
+        return res.status(400).json({message: 'Ocorreu algum erro ao buscar as tarefas'})
     }
 }
 
@@ -72,7 +75,7 @@ const remove = async (req, res, next) => {
     try {
         if (await Todo.findById(id)) {
             await Todo.findByIdAndRemove(id)
-            return res.status(200).json({message: 'Tarefa excluída do sistema.'})
+            return res.status(200).json({message: 'Tarefa excluída do sistema'})
         } else {
             return res.status(404).send({message: 'Tarefa não existe'});
         }
@@ -113,14 +116,7 @@ const finishDoing = async (req, res, next) => {
             return res.status(404).send({message: 'Tarefa não existe'});
         }
         if (todo.startedAt !== undefined) {
-            const timeDifference = Math.abs(todo.startedAt.getTime() - new Date().getTime());
-            const timeInSeconds = timeDifference / 1000
-            todo.startedAt = undefined
-            if (todo.workTime) {
-                todo.workTime = todo.workTime + timeInSeconds
-            } else {
-                todo.workTime = timeInSeconds
-            }
+            setWorkTime(todo, todo.startedAt)
             todo.save()
             return res.status(200).json({message: 'Tarefa com execução finalizada'})
         } else {
@@ -141,19 +137,12 @@ const done = async (req, res, next) => {
         }
         todo.done = !todo.done
         if (todo.startedAt !== undefined && todo.done) {
-            const timeDifference = Math.abs(todo.startedAt.getTime() - new Date().getTime());
-            const timeInSeconds = timeDifference / 1000
-            todo.startedAt = undefined
-            if (todo.workTime) {
-                todo.workTime = todo.workTime + timeInSeconds
-            } else {
-                todo.workTime = timeInSeconds
-            }
+            setWorkTime(todo, todo.startedAt)
         }
         todo.save()
         return res.status(200).json({message: 'Tarefa marcada como ' + (todo.done ? 'concluída' : 'pendente')})
     } catch (e) {
-        return res.status(400).json({message: 'Não foi possível marcar tarefa como concluída'})
+        return res.status(400).json({message: 'Não foi possível mudar status da tarefa'})
     }
 }
 

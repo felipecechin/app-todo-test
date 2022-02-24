@@ -9,4 +9,15 @@ const handleTodoErrors = (e, req, res) => {
     }
 }
 
-module.exports = {handleTodoErrors}
+const setWorkTime = (todo, startedAt) => {
+    const timeDifference = Math.abs(startedAt.getTime() - new Date().getTime());
+    const timeInSeconds = timeDifference / 1000
+    todo.startedAt = undefined
+    if (todo.workTime) {
+        todo.workTime = todo.workTime + timeInSeconds
+    } else {
+        todo.workTime = timeInSeconds
+    }
+}
+
+module.exports = {handleTodoErrors, setWorkTime}
